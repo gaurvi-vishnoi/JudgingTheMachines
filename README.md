@@ -55,30 +55,36 @@ Who this is for:
 
 Think of quality and safety as four layers that work together. Most teams only build the first one and wonder why production still surprises them.
 
+```mermaid
+flowchart LR
+    L1["<b>1. Offline evals</b><br/>before you ship<br/><br/>golden sets · benchmarks<br/>LLM judges · CI gates"]
+    L2["<b>2. Guardrails</b><br/>every request, at runtime<br/><br/>input and output filters<br/>tool policy · approvals"]
+    L3["<b>3. Online evals</b><br/>production monitoring<br/><br/>judges on sampled traffic<br/>drift · cost · latency"]
+    L4["<b>4. Human oversight</b><br/>the source of truth<br/><br/>expert review<br/>calibration · audits"]
+
+    L1 ==>|ship| L2
+    L2 ==>|traces| L3
+    L3 ==>|disagreements| L4
+    L4 ==>|new golden examples| L1
+
+    classDef offline fill:#E8F1FB,stroke:#3B82C4,color:#0B2540
+    classDef rails fill:#FDF1E3,stroke:#D9822B,color:#3A2208
+    classDef online fill:#E9F7EF,stroke:#2E9E5B,color:#0B2E1A
+    classDef human fill:#F3ECFB,stroke:#8B5CC4,color:#24113A
+    class L1 offline
+    class L2 rails
+    class L3 online
+    class L4 human
 ```
-                    ┌──────────────────────────────────────────────┐
-  Layer 4           │  HUMAN OVERSIGHT                              │
-  (slowest,         │  expert review, calibration sets, audits     │
-   most trusted)    └──────────────────────────────────────────────┘
-                                        ▲ samples + disagreements
-                    ┌──────────────────────────────────────────────┐
-  Layer 3           │  ONLINE EVALS (production monitoring)         │
-                    │  judges on sampled traffic, user signals,    │
-                    │  drift, cost, latency                        │
-                    └──────────────────────────────────────────────┘
-                                        ▲ traces
-                    ┌──────────────────────────────────────────────┐
-  Layer 2           │  GUARDRAILS (runtime, every request)          │
-                    │  input filters, output filters, tool policy, │
-                    │  permission checks, human approval gates     │
-                    └──────────────────────────────────────────────┘
-                                        ▲ blocks / rewrites / escalates
-                    ┌──────────────────────────────────────────────┐
-  Layer 1           │  OFFLINE EVALS (before you ship)              │
-  (fastest,         │  golden sets, benchmarks, LLM judges,        │
-   cheapest)        │  code checks, red team suites, CI gates      │
-                    └──────────────────────────────────────────────┘
-```
+
+| Layer | When it runs | Speed and cost | What it catches |
+|:--|:--|:--|:--|
+| **Offline evals** | Before every release | Fast, cheap | Regressions, known failure modes, benchmark gaps |
+| **Guardrails** | On every request | Milliseconds, per call cost | Unsafe input, unsafe output, risky tool calls |
+| **Online evals** | Continuously, on sampled traffic | Minutes to hours | Drift, new failure modes, cost and latency spikes |
+| **Human oversight** | Weekly or on escalation | Slow, most expensive | Judge errors, rubric gaps, high stakes edge cases |
+
+The loop matters more than any single layer: what humans find in production becomes tomorrow's offline test case.
 
 **Three kinds of graders exist, and you want all three:**
 
@@ -432,32 +438,26 @@ Guardrails are runtime controls that run on every request. Evals tell you how of
 
 ### 10.1 Where guardrails sit
 
+```mermaid
+flowchart LR
+    U(["User input"]) ==> I["<b>Input rail</b><br/>jailbreak and injection detection<br/>PII redaction · scope checks"]
+    I ==> C["<b>Context rail</b><br/>untrusted content kept as data<br/>provenance tracking"]
+    C ==> A["<b>Action rail</b><br/>allowlisted tools · least privilege<br/>approval for irreversible actions"]
+    A ==> O["<b>Output rail</b><br/>safety classifier · groundedness<br/>PII leak and schema checks"]
+    O ==> R(["Response or action"])
+
+    classDef rail fill:#FDF1E3,stroke:#D9822B,color:#3A2208
+    classDef io fill:#EEF0F3,stroke:#6B7280,color:#111827
+    class I,C,A,O rail
+    class U,R io
 ```
-  User input
-      │
-      ▼
- ┌──────────────┐   jailbreak / injection detection, PII redaction,
- │ INPUT RAIL   │   topic and scope checks, rate limits
- └──────────────┘
-      │
-      ▼
- ┌──────────────┐   untrusted content kept separate from instructions,
- │ CONTEXT RAIL │   retrieved docs tagged as data, provenance tracking
- └──────────────┘
-      │
-      ▼
- ┌──────────────┐   allowlisted tools, argument validation, least privilege,
- │ ACTION RAIL  │   spend limits, human approval for irreversible actions
- └──────────────┘
-      │
-      ▼
- ┌──────────────┐   safety classifier, groundedness check, PII leak check,
- │ OUTPUT RAIL  │   format and schema validation, brand and policy checks
- └──────────────┘
-      │
-      ▼
-  Response / action
-```
+
+| Rail | Checks | Typical action on failure |
+|:--|:--|:--|
+| **Input** | Jailbreaks, prompt injection, PII, off topic requests, rate limits | Block, redact, or ask for clarification |
+| **Context** | Retrieved documents and tool outputs treated as data, never as instructions | Strip or quarantine suspicious content |
+| **Action** | Tool allowlist, argument validation, spend limits, permissions | Deny the call or route to a human for approval |
+| **Output** | Harmful content, ungrounded claims, leaked PII, invalid format, brand policy | Rewrite, regenerate, or refuse |
 
 ### 10.2 Guard models (classifiers)
 
